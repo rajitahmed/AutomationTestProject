@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automation API Calls</title>
+    <style>
+        #output {
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+    <script>
+        function executeApiCalls() {
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerHTML = "🚀 Starting API calls...<br>";
+
+            fetch('/api/finicity/execute')
+                .then(response => response.body.getReader())
+                .then(reader => {
+                    function read() {
+                        return reader.read().then(({ done, value }) => {
+                            if (done) return;
+                            outputDiv.innerHTML += new TextDecoder().decode(value) + "<br>";
+                            return read();
+                        });
+                    }
+                    return read();
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    outputDiv.innerHTML += `<br>❌ Error: ${error.message}`;
+                });
+        }
+    </script>
+</head>
+<body>
+<h1>Automation API Calls</h1>
+<button onclick="executeApiCalls()">Start API Calls</button>
+<div id="output"></div>
+</body>
+</html>
