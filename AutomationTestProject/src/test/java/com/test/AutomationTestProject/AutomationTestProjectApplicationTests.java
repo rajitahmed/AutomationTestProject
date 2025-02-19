@@ -1,4 +1,4 @@
-package com.rajit.AutomationTestProject;
+package com.test.AutomationTestProject;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

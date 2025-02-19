@@ -1,4 +1,4 @@
-package com.rajit.AutomationTestProject.model;
+package com.test.AutomationTestProject.model;
 
 import lombok.Getter;
 
