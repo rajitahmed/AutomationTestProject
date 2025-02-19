@@ -1,16 +1,16 @@
-package com.rajit.AutomationTestProject.service;
+package com.test.AutomationTestProject.service;
 
-import com.rajit.AutomationTestProject.model.AuthenticationRequest;
-import com.rajit.AutomationTestProject.model.AuthenticationResponse;
-import com.rajit.AutomationTestProject.model.CustomerRequest;
-import com.rajit.AutomationTestProject.model.CustomerResponse;
-import com.rajit.AutomationTestProject.model.ConnectLinkResponse;
+
+
+import com.test.AutomationTestProject.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
+
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -23,16 +23,17 @@ public class FinicityService {
     @Value("${finicity.partnerSecret}")
     private String partnerSecret;
 
-    private String appToken;
-    private String customerId;
-    private String generatedLink;
+    private volatile String appToken;
+    private volatile String customerId;
+    private volatile String generatedLink;
 
     public FinicityService(WebClient webClient) {
         this.webClient = webClient;
     }
 
-    // Authenticate and get token
     public Mono<String> authenticate() {
+        log.info("🔄 Starting authentication...");
+
         AuthenticationRequest request = new AuthenticationRequest(partnerId, partnerSecret);
 
         return webClient.post()
@@ -42,21 +43,27 @@ public class FinicityService {
                 .bodyToMono(AuthenticationResponse.class)
                 .map(response -> {
                     this.appToken = response.getToken();
+                    log.info("✅ Authentication Successful: Token Acquired -> {}", this.appToken);
                     return "✅ Authentication Successful: Token Acquired";
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> {
                     log.error("❌ Authentication Failed: {}", ex.getResponseBodyAsString());
                     return Mono.just("❌ Authentication Failed: " + ex.getResponseBodyAsString());
-                })
-                .onErrorResume(Exception.class, ex -> {
-                    log.error("❌ Unexpected Error during Authentication: {}", ex.getMessage());
-                    return Mono.just("❌ Unexpected Error during Authentication: " + ex.getMessage());
                 });
     }
 
-    // Create a test customer
     public Mono<String> createTestCustomer() {
-        CustomerRequest request = new CustomerRequest("TESTER");
+        if (appToken == null) {
+            log.error("❌ Cannot create customer: appToken is NULL!");
+            return Mono.just("❌ Cannot create customer: Missing appToken!");
+        }
+
+        // Generate a unique username to avoid duplicate errors
+        String uniqueUsername = "TESTER_" + UUID.randomUUID().toString().substring(0, 8);
+
+        log.info("🔄 Creating test customer with username: {}", uniqueUsername);
+
+        CustomerRequest request = new CustomerRequest(uniqueUsername);
 
         return webClient.post()
                 .uri("/aggregation/v2/customers/testing")
@@ -66,39 +73,44 @@ public class FinicityService {
                 .bodyToMono(CustomerResponse.class)
                 .map(response -> {
                     this.customerId = response.getId();
+                    log.info("✅ Customer Created: ID = {}", this.customerId);
                     return "✅ Customer Created: ID = " + customerId;
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> {
                     log.error("❌ Customer Creation Failed: {}", ex.getResponseBodyAsString());
                     return Mono.just("❌ Customer Creation Failed: " + ex.getResponseBodyAsString());
-                })
-                .onErrorResume(Exception.class, ex -> {
-                    log.error("❌ Unexpected Error during Customer Creation: {}", ex.getMessage());
-                    return Mono.just("❌ Unexpected Error during Customer Creation: " + ex.getMessage());
                 });
     }
 
-    // Generate Connect Link
     public Mono<String> generateConnectLink() {
+        if (customerId == null) {
+            log.error("❌ Cannot generate link: customerId is NULL!");
+            return Mono.just("❌ Cannot generate link: Missing customerId!");
+        }
+
+        log.info("🔄 Generating Connect Link...");
+
+        // Create request payload as JSON
+        ConnectLinkRequest request = new ConnectLinkRequest(
+                partnerId,
+                customerId,
+                "https://www.finicity.com/connect/" // Redirect URI
+        );
+
         return webClient.post()
-                .uri(uriBuilder -> uriBuilder.path("/connect/v2/generate")
-                        .queryParam("partnerId", partnerId)
-                        .queryParam("customerId", customerId)
-                        .build())
+                .uri("/connect/v2/generate")
                 .header("Finicity-App-Token", appToken)
+                .bodyValue(request) // Send JSON payload
                 .retrieve()
                 .bodyToMono(ConnectLinkResponse.class)
                 .map(response -> {
                     this.generatedLink = response.getLink();
+                    log.info("✅ Connect Link Generated: {}", this.generatedLink);
                     return "✅ Connect Link Generated: " + generatedLink;
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> {
                     log.error("❌ Connect Link Generation Failed: {}", ex.getResponseBodyAsString());
                     return Mono.just("❌ Connect Link Generation Failed: " + ex.getResponseBodyAsString());
-                })
-                .onErrorResume(Exception.class, ex -> {
-                    log.error("❌ Unexpected Error during Connect Link Generation: {}", ex.getMessage());
-                    return Mono.just("❌ Unexpected Error during Connect Link Generation: " + ex.getMessage());
                 });
     }
 }

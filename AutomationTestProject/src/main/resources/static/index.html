@@ -13,19 +13,29 @@
     <script>
         function executeApiCalls() {
             const outputDiv = document.getElementById('output');
-            outputDiv.innerHTML = "🚀 Starting API calls...<br>";
+            outputDiv.innerHTML = "🚀 Starting API calls...\n";
 
             fetch('/api/finicity/execute')
-                .then(response => response.body.getReader())
-                .then(reader => {
-                    function read() {
+                .then(response => {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+
+                    function readStream() {
                         return reader.read().then(({ done, value }) => {
                             if (done) return;
-                            outputDiv.innerHTML += new TextDecoder().decode(value) + "<br>";
-                            return read();
+                            const text = decoder.decode(value);
+
+                            // Split lines properly to avoid buffer merging
+                            const lines = text.split("\n").filter(line => line.trim() !== "");
+
+                            lines.forEach(line => {
+                                outputDiv.innerHTML += line + "<br>"; // Print each API response line
+                            });
+
+                            return readStream();
                         });
                     }
-                    return read();
+                    return readStream();
                 })
                 .catch(error => {
                     console.error("Error:", error);

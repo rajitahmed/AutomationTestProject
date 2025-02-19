@@ -1,4 +1,4 @@
-package com.rajit.AutomationTestProject.config;
+package com.test.AutomationTestProject.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
