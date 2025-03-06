@@ -1,7 +1,5 @@
 package com.test.AutomationTestProject.service;
 
-
-
 import com.test.AutomationTestProject.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,7 +30,7 @@ public class FinicityService {
     }
 
     public Mono<String> authenticate() {
-        log.info("🔄 Starting authentication...");
+        log.info("Starting authentication...");
 
         AuthenticationRequest request = new AuthenticationRequest(partnerId, partnerSecret);
 
@@ -43,25 +41,25 @@ public class FinicityService {
                 .bodyToMono(AuthenticationResponse.class)
                 .map(response -> {
                     this.appToken = response.getToken();
-                    log.info("✅ Authentication Successful: Token Acquired -> {}", this.appToken);
+                    log.info("Authentication Successful: Token Acquired");
                     return "✅ Authentication Successful: Token Acquired";
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> {
-                    log.error("❌ Authentication Failed: {}", ex.getResponseBodyAsString());
+                    log.error("Authentication Failed: {}", ex.getResponseBodyAsString());
                     return Mono.just("❌ Authentication Failed: " + ex.getResponseBodyAsString());
                 });
     }
 
     public Mono<String> createTestCustomer() {
         if (appToken == null) {
-            log.error("❌ Cannot create customer: appToken is NULL!");
-            return Mono.just("❌ Cannot create customer: Missing appToken!");
+            log.error("Cannot create customer: appToken is NULL!");
+            return Mono.just("❌ Cannot create customer: Missing authentication token!");
         }
 
         // Generate a unique username to avoid duplicate errors
         String uniqueUsername = "TESTER_" + UUID.randomUUID().toString().substring(0, 8);
 
-        log.info("🔄 Creating test customer with username: {}", uniqueUsername);
+        log.info("Creating test customer with username: {}", uniqueUsername);
 
         CustomerRequest request = new CustomerRequest(uniqueUsername);
 
@@ -73,22 +71,22 @@ public class FinicityService {
                 .bodyToMono(CustomerResponse.class)
                 .map(response -> {
                     this.customerId = response.getId();
-                    log.info("✅ Customer Created: ID = {}", this.customerId);
-                    return "✅ Customer Created: ID = " + customerId;
+                    log.info("Customer Created with ID: {}", this.customerId);
+                    return "✅ Customer Created with ID: " + this.customerId;
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> {
-                    log.error("❌ Customer Creation Failed: {}", ex.getResponseBodyAsString());
+                    log.error("Customer Creation Failed: {}", ex.getResponseBodyAsString());
                     return Mono.just("❌ Customer Creation Failed: " + ex.getResponseBodyAsString());
                 });
     }
 
     public Mono<String> generateConnectLink() {
         if (customerId == null) {
-            log.error("❌ Cannot generate link: customerId is NULL!");
-            return Mono.just("❌ Cannot generate link: Missing customerId!");
+            log.error("Cannot generate link: customerId is NULL!");
+            return Mono.just("❌ Cannot generate link: Missing customer ID!");
         }
 
-        log.info("🔄 Generating Connect Link...");
+        log.info("Generating Connect Link...");
 
         // Create request payload as JSON
         ConnectLinkRequest request = new ConnectLinkRequest(
@@ -100,17 +98,58 @@ public class FinicityService {
         return webClient.post()
                 .uri("/connect/v2/generate")
                 .header("Finicity-App-Token", appToken)
-                .bodyValue(request) // Send JSON payload
+                .bodyValue(request)
                 .retrieve()
                 .bodyToMono(ConnectLinkResponse.class)
                 .map(response -> {
                     this.generatedLink = response.getLink();
-                    log.info("✅ Connect Link Generated: {}", this.generatedLink);
-                    return "✅ Connect Link Generated: " + generatedLink;
+                    log.info("Connect Link Generated Successfully");
+                    return "✅ Connect Link Generated: " + this.generatedLink;
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> {
-                    log.error("❌ Connect Link Generation Failed: {}", ex.getResponseBodyAsString());
+                    log.error("Connect Link Generation Failed: {}", ex.getResponseBodyAsString());
                     return Mono.just("❌ Connect Link Generation Failed: " + ex.getResponseBodyAsString());
                 });
+    }
+    
+    public Mono<String> refreshCustomerAccounts() {
+        if (customerId == null) {
+            log.error("Cannot refresh accounts: customerId is NULL!");
+            return Mono.just("❌ Cannot refresh accounts: Missing customer ID!");
+        }
+        
+        if (appToken == null) {
+            log.error("Cannot refresh accounts: appToken is NULL!");
+            return Mono.just("❌ Cannot refresh accounts: Missing authentication token!");
+        }
+
+        log.info("Refreshing customer accounts for customer ID: {}", customerId);
+
+        return webClient.post()
+                .uri("/aggregation/v1/customers/{customerId}/accounts", customerId)
+                .header("Finicity-App-Token", appToken)
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(response -> {
+                    log.info("Customer accounts refreshed successfully");
+                    return "✅ Customer accounts refreshed successfully: " + response;
+                })
+                .onErrorResume(WebClientResponseException.class, ex -> {
+                    log.error("Account refresh failed: {}", ex.getResponseBodyAsString());
+                    return Mono.just("❌ Account refresh failed: " + ex.getResponseBodyAsString());
+                });
+    }
+    
+    // Getters for stored values
+    public String getAppToken() {
+        return appToken;
+    }
+    
+    public String getCustomerId() {
+        return customerId;
+    }
+    
+    public String getGeneratedLink() {
+        return generatedLink;
     }
 }
