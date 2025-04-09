@@ -220,8 +220,8 @@
                         <div class="api-card-description">
                             Test the BIN Lookup API to retrieve information about a Bank Identification Number.
                         </div>
-                        <button class="action-button" onclick="selectApiFlow('binlookup')" disabled>
-                            Coming Soon
+                        <button class="action-button" onclick="selectApiFlow('binlookup')">
+                            Select Flow
                         </button>
                     </div>
                 </div>
@@ -254,9 +254,31 @@
             </div>
         </div>
         
+        <!-- Update the BIN Lookup section -->
         <div id="binLookupSection" class="api-section" style="display: none;">
             <h2 class="section-title">BIN Lookup API</h2>
-            <p>This feature is coming soon.</p>
+            
+            <div class="status-indicator">
+                <div id="binStatusDot" class="status-dot idle"></div>
+                <span id="binStatusText" class="status-text">Ready to execute BIN Lookup API calls</span>
+            </div>
+            
+            <button id="binExecuteButton" class="action-button" onclick="executeBinLookup()">
+                <span>Start BIN Lookup</span>
+            </button>
+            
+            <div class="logs-container" id="binLogsContainer">
+                <div class="log-entry info">
+                    System ready. Click the button above to start the BIN Lookup API calls.
+                </div>
+            </div>
+            
+            <div id="binResponseDataSection" style="display: none; margin-top: 20px;">
+                <h3>BIN Lookup Results</h3>
+                <div id="binResponseData" class="response-data">
+                    No data available yet. Run the BIN Lookup first.
+                </div>
+            </div>
         </div>
     </div>
 
@@ -433,3 +455,146 @@
     </script>
 </body>
 </html>
+
+<!-- Add this to the script section -->
+<script>
+    // Global variables for BIN Lookup
+    let isBinLookupRunning = false;
+    const binLogsContainer = document.getElementById('binLogsContainer');
+    const binExecuteButton = document.getElementById('binExecuteButton');
+    const binStatusDot = document.getElementById('binStatusDot');
+    const binStatusText = document.getElementById('binStatusText');
+    const binResponseDataSection = document.getElementById('binResponseDataSection');
+    const binResponseData = document.getElementById('binResponseData');
+    
+    // Function to execute BIN Lookup API calls
+    function executeBinLookup() {
+        if (isBinLookupRunning) return;
+        isBinLookupRunning = true;
+        
+        // Clear previous logs
+        binLogsContainer.innerHTML = '';
+        
+        // Update UI state
+        binExecuteButton.disabled = true;
+        binExecuteButton.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> <span>Processing...</span>';
+        updateBinStatus('running');
+        
+        // Add initial log
+        addBinLogEntry('Initializing BIN Lookup API calls...', 'info');
+        
+        // Hide response data
+        binResponseDataSection.style.display = 'none';
+        
+        // Fetch API stream
+        fetch('/api/binlookup/execute')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                // Function to read the stream
+                function readStream() {
+                    return reader.read().then(({ done, value }) => {
+                        if (done) {
+                            // Stream is complete
+                            binExecuteButton.disabled = false;
+                            binExecuteButton.innerHTML = '<span>Start BIN Lookup</span>';
+                            isBinLookupRunning = false;
+                            return;
+                        }
+                        
+                        // Decode and process the chunk
+                        const text = decoder.decode(value);
+                        const lines = text.split('\n').filter(line => line.trim() !== '');
+                        
+                        // Process each line
+                        lines.forEach(line => {
+                            let logType = 'info';
+                            
+                            if (line.includes('⏳')) {
+                                logType = 'processing';
+                            } else if (line.includes('✅')) {
+                                logType = 'success';
+                                
+                                // Check if this is the BIN Lookup results
+                                if (line.includes('BIN Lookup results:')) {
+                                    const resultsStart = line.indexOf('BIN Lookup results:') + 'BIN Lookup results:'.length;
+                                    const resultsJson = line.substring(resultsStart).trim();
+                                    try {
+                                        const formattedJson = JSON.stringify(JSON.parse(resultsJson), null, 2);
+                                        binResponseData.textContent = formattedJson;
+                                        binResponseDataSection.style.display = 'block';
+                                    } catch (e) {
+                                        console.error('Error parsing JSON:', e);
+                                        binResponseData.textContent = resultsJson;
+                                        binResponseDataSection.style.display = 'block';
+                                    }
+                                }
+                                
+                                // Check if this is the completion message
+                                if (line.includes('BIN Lookup flow completed successfully')) {
+                                    updateBinStatus('completed');
+                                }
+                            } else if (line.includes('⚠️')) {
+                                logType = 'warning';
+                            } else if (line.includes('❌')) {
+                                logType = 'error';
+                                updateBinStatus('error');
+                            }
+                            
+                            addBinLogEntry(line, logType);
+                        });
+                        
+                        // Continue reading
+                        return readStream();
+                    });
+                }
+                
+                return readStream();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                addBinLogEntry(`Error: ${error.message}`, 'error');
+                binExecuteButton.disabled = false;
+                binExecuteButton.innerHTML = '<span>Start BIN Lookup</span>';
+                updateBinStatus('error');
+                isBinLookupRunning = false;
+            });
+    }
+    
+    // Function to add a log entry to the BIN Lookup logs container
+    function addBinLogEntry(message, type = 'info') {
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry ${type}`;
+        logEntry.textContent = message;
+        
+        binLogsContainer.appendChild(logEntry);
+        binLogsContainer.scrollTop = binLogsContainer.scrollHeight;
+        
+        return logEntry;
+    }
+    
+    // Function to update the BIN Lookup status indicator
+    function updateBinStatus(status) {
+        binStatusDot.className = `status-dot ${status}`;
+        
+        switch (status) {
+            case 'idle':
+                binStatusText.textContent = 'Ready to execute BIN Lookup API calls';
+                break;
+            case 'running':
+                binStatusText.textContent = 'BIN Lookup API calls in progress...';
+                break;
+            case 'completed':
+                binStatusText.textContent = 'BIN Lookup API calls completed successfully';
+                break;
+            case 'error':
+                binStatusText.textContent = 'BIN Lookup API calls failed with errors';
+                break;
+        }
+    }
+</script>
